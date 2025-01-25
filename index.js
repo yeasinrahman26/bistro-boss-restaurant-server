@@ -1,4 +1,5 @@
 const express = require("express");
+const jwt = require("jsonwebtoken");
 const app = express();
 const cors = require("cors");
 require("dotenv").config();
@@ -31,7 +32,57 @@ async function run() {
     const reviewCollection = client.db("bistroDb").collection("reviews");
     const cartCollection = client.db("bistroDb").collection("carts");
 
-    // users related apis
+    // jst related Apis---------------------------------------------------->>
+
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+      res.send({ token });
+    });
+
+    // middlewares
+    const verifyToken = (req, res, next) => {
+       console.log( "inside verify token",req.headers)
+       if(!req.headers.authorization){
+        return res.status(401).send({message: 'no Access'})
+       }
+       const token=req.headers.authorization.split(' ')[1];
+       jwt.verify(token, process.env.ACCESS_TOKEN_SECRET,(error, decoded)=>{
+        if(error){
+          return res.status(401).send({ message: "no Access" });
+        }
+        req.decoded=decoded;
+        next();
+       })
+       
+    
+    };
+    // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+    // users related apis____________________________________________________
+    
+    app.get("/users", verifyToken, async (req, res) => {
+     
+      const result = await userCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.get('/user/admin/:email', verifyToken,async(req,res)=>{
+      const email= req.params.email;
+      if(email !== req.decoded.email){
+         return res.status(401).send({ message: "no Access" });
+      }
+      const query={email: email};
+      const user= await userCollection.findOne(query);
+      let admin=false;
+      if(user){
+        admin = user?.role === 'admin'
+      }
+      res.send({admin})
+    })
+
 
     app.patch("/users/admin/:id", async (req, res) => {
       const id = req.params.id;
@@ -52,13 +103,9 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users", async (req, res) => {
-      const result = await userCollection.find().toArray();
-      res.send(result);
-    });
     app.post("/users", async (req, res) => {
       const user = req.body;
-      // insert email if user doesnt exists:
+      // insert email if user doesn`t exists:
       const query = { email: user.email };
       const existingUser = await userCollection.findOne(query);
       if (existingUser) {
@@ -68,20 +115,21 @@ async function run() {
       const result = await userCollection.insertOne(user);
       res.send(result);
     });
+    // ------------------------------------------------------------------------------
 
-    // menu related apis
+    // menu related apis-------------------------------------------------------------
     app.get("/menu", async (req, res) => {
       const result = await menuCollection.find().toArray();
       res.send(result);
     });
 
-    // review related apis
+    // review related apis----------------------------------------------
     app.get("/review", async (req, res) => {
       const result = await reviewCollection.find().toArray();
       res.send(result);
     });
 
-    // carts collection
+    // carts collection--------------------------------------------------------------
     app.get("/carts", async (req, res) => {
       const email = req.query.email;
       const query = { email: email };
@@ -101,6 +149,7 @@ async function run() {
       const result = await cartCollection.deleteOne(query);
       res.send(result);
     });
+    // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
     // ..........................................................
     //
